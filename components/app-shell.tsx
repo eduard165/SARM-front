@@ -1,10 +1,11 @@
 "use client";
 
-import { useEffect, useRef, type ReactNode } from "react";
+import { useEffect, useRef, useState, type ReactNode } from "react";
 import Link from "next/link";
-import { usePathname } from "next/navigation";
+import { usePathname, useSearchParams } from "next/navigation";
 import {
   Building2,
+  Beef,
   ChevronDown,
   Home,
   Leaf,
@@ -14,17 +15,24 @@ import {
   UserRoundPlus,
   UsersRound,
   X,
+  type LucideIcon,
 } from "lucide-react";
 import { roleNames, type Profile } from "@/lib/types";
 import { LogoutButton } from "./logout-button";
 
 const titles: Record<string, string> = {
   "/inicio": "Inicio",
+  "/ganado/animales": "Animales",
+  "/ganado/animales/nuevo": "Registrar animal",
+  "/ganado/hatos": "Hatos",
+  "/ganado/ubicaciones": "Ubicaciones ganaderas",
   "/usuarios": "Gestionar usuarios",
   "/usuarios/nuevo": "Agregar usuario",
   "/administradores/nuevo": "Agregar administrador",
   "/negocios/nuevo": "Agregar negocio",
 };
+
+type NavLink = { href: string; label: string; icon: LucideIcon };
 
 function ProfileMenu({ actor }: { actor: Profile }) {
   const ref = useRef<HTMLDetailsElement>(null);
@@ -139,10 +147,15 @@ function Navigation({
   onNavigate?: () => void;
 }) {
   const path = usePathname();
+  const searchParams = useSearchParams();
+  const business = searchParams.get("negocio");
   const superadmin = actor.rol === "superadministrador";
   const manager = superadmin || actor.rol === "administrador";
+  const showHerd = superadmin || actor.rol === "usuario";
 
-  const links = [
+  const home: NavLink = { href: "/inicio", label: "Inicio", icon: Home };
+
+  const userLinks: NavLink[] = [
     ...(superadmin
       ? [
           {
@@ -169,28 +182,83 @@ function Navigation({
     },
   ];
 
-  const item = ({ href, label, icon: Icon }: (typeof links)[number]) => (
-    <Link
-      key={href}
-      href={href}
-      onClick={onNavigate}
-      aria-current={path === href ? "page" : undefined}
-      className={`flex items-center gap-3 rounded-xl px-3 py-3 text-sm transition focus-visible:outline-2 focus-visible:outline-emerald-200 ${
-        path === href
-          ? "bg-[#dfead4] font-semibold text-[#173b2f]"
-          : "text-emerald-50/75 hover:bg-white/10 hover:text-white"
-      }`}
-    >
-      <Icon className="shrink-0" size={17} />
-      {label}
-    </Link>
-  );
+  const herdLinks: NavLink[] = [
+    { href: "/ganado/animales", label: "Animales", icon: ListFilter },
+    {
+      href: "/ganado/animales/nuevo",
+      label: "Registrar animal",
+      icon: UserRoundPlus,
+    },
+    { href: "/ganado/hatos", label: "Hatos", icon: UsersRound },
+    {
+      href: "/ganado/ubicaciones",
+      label: "Ubicaciones",
+      icon: Building2,
+    },
+  ];
+
+  // Cada grupo se abre solo cuando estás dentro de una de sus páginas
+  const inUsers = userLinks.some((l) => l.href === path);
+  const inHerd = path.startsWith("/ganado");
+  const [usersOpen, setUsersOpen] = useState(inUsers);
+  const [herdOpen, setHerdOpen] = useState(inHerd);
+
+  useEffect(() => {
+    if (inUsers) setUsersOpen(true);
+  }, [inUsers]);
+
+  useEffect(() => {
+    if (inHerd) setHerdOpen(true);
+  }, [inHerd]);
+
+  const isActive = (href: string) =>
+    path === href ||
+    // el expediente de un animal (/ganado/animales/123) marca "Animales"
+    (href === "/ganado/animales" &&
+      path.startsWith("/ganado/animales/") &&
+      path !== "/ganado/animales/nuevo");
+
+  const item = ({ href, label, icon: Icon }: NavLink) => {
+    const active = isActive(href);
+
+    return (
+      <Link
+        key={href}
+        href={
+          href.startsWith("/ganado") && business
+            ? `${href}?negocio=${encodeURIComponent(business)}`
+            : href
+        }
+        onClick={onNavigate}
+        aria-current={active ? "page" : undefined}
+        className={`flex items-center gap-3 rounded-xl px-3 py-3 text-sm transition focus-visible:outline-2 focus-visible:outline-emerald-200 ${
+          active
+            ? "bg-[#dfead4] font-semibold text-[#173b2f]"
+            : "text-emerald-50/75 hover:bg-white/10 hover:text-white"
+        }`}
+      >
+        <Icon className="shrink-0" size={17} />
+        {label}
+      </Link>
+    );
+  };
+
+  const summaryClass = (active: boolean) =>
+    `flex cursor-pointer list-none items-center gap-3 rounded-xl px-3 py-3 text-sm font-semibold transition hover:bg-white/10 hover:text-white focus-visible:outline-2 focus-visible:outline-emerald-200 [&::-webkit-details-marker]:hidden ${
+      active ? "text-white" : "text-emerald-50/85"
+    }`;
 
   return (
     <nav aria-label="Menú principal" className="mt-8 space-y-1">
-      {manager ? (
-        <details className="group/users">
-          <summary className="flex cursor-pointer list-none items-center gap-3 rounded-xl px-3 py-3 text-sm font-semibold text-emerald-50/85 transition hover:bg-white/10 hover:text-white focus-visible:outline-2 focus-visible:outline-emerald-200 [&::-webkit-details-marker]:hidden">
+      {item(home)}
+
+      {manager && (
+        <details
+          className="group/users"
+          open={usersOpen}
+          onToggle={(e) => setUsersOpen(e.currentTarget.open)}
+        >
+          <summary className={summaryClass(inUsers)}>
             <UsersRound className="shrink-0" size={17} />
             <span className="flex-1">Usuarios</span>
             <ChevronDown
@@ -200,11 +268,30 @@ function Navigation({
           </summary>
 
           <div className="ml-3 mt-1 space-y-1 border-l border-white/15 pl-2">
-            {links.map(item)}
+            {userLinks.map(item)}
           </div>
         </details>
-      ) : (
-        item({ href: "/inicio", label: "Inicio", icon: Home })
+      )}
+
+      {showHerd && (
+        <details
+          className="group/herd"
+          open={herdOpen}
+          onToggle={(e) => setHerdOpen(e.currentTarget.open)}
+        >
+          <summary className={summaryClass(inHerd)}>
+            <Beef className="shrink-0" size={17} />
+            <span className="flex-1">Ganado</span>
+            <ChevronDown
+              className="shrink-0 transition-transform group-open/herd:rotate-180"
+              size={16}
+            />
+          </summary>
+
+          <div className="ml-3 mt-1 space-y-1 border-l border-white/15 pl-2">
+            {herdLinks.map(item)}
+          </div>
+        </details>
       )}
     </nav>
   );
@@ -226,10 +313,7 @@ export function AppShell({
 
   const sidebar = (
     <>
-      <Link
-        href={actor.rol === "usuario" ? "/inicio" : "/usuarios"}
-        className="flex items-center gap-3"
-      >
+      <Link href="/inicio" className="flex items-center gap-3">
         <span className="rounded-xl bg-[#dfebd4] p-2 text-[#173b2f]">
           <Leaf size={22} />
         </span>
@@ -297,7 +381,10 @@ export function AppShell({
               {actor.rol === "usuario" ? "Mi espacio" : "Administración"}
             </p>
             <p className="mt-1 text-sm font-semibold">
-              {titles[path] || "S.A.R.M."}
+              {titles[path] ||
+                (path.startsWith("/ganado/animales/")
+                  ? "Expediente del animal"
+                  : "S.A.R.M.")}
             </p>
           </div>
 

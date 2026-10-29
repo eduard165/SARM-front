@@ -1,10 +1,15 @@
-export async function api(path: string, body?: unknown, signal?: AbortSignal) {
+export async function api(
+  path: string,
+  body?: unknown,
+  signal?: AbortSignal,
+  method: "POST" | "PATCH" = "POST",
+) {
   const response = await fetch(
     `/api/sarm/${path}`,
     body === undefined
       ? { cache: "no-store", signal }
       : {
-          method: "POST",
+          method,
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify(body),
           signal,

@@ -1,71 +1,64 @@
-# S.A.R.M. — Administración de usuarios
+# SARM Frontend 0.3.0 — usuarios y ganado
 
-Next.js + Tailwind, conectado al backend FastAPI en https://sarm-backend.vercel.app.
+Next.js + React + Tailwind. Frontend conectado con SARM API 0.5.0. Base de trabajo: repositorio eduard165/SARM-front, rama main, commit 29a10b5f9da1a2c54636ba1470fbd8afd0e362b5.
 
-## Iniciar
+## Ejecutar y actualizar
 
-Detén el frontend anterior con Ctrl+C y usa el contenido de esta carpeta. Conserva tu `.git` y tu configuración local si tienes valores personalizados. Se retiró `components/users-workspace.tsx`; si copias sobre el proyecto anterior, puedes borrar ese archivo porque ya no se utiliza.
+Conserva tu `.env.local`, `.git` y configuracion de Vercel. Copia el contenido de esta entrega sobre la carpeta del frontend existente, sin sustituir el repositorio entero. El paquete no incluye node_modules, .next, credenciales ni archivos nuevos de entorno.
 
 ```powershell
-npm install
+npm ci
 npm run dev
 ```
 
-Abre http://localhost:3000. Se usa el mismo usuario y contraseña de las cuentas que ya registraste. No se incluyen contraseñas ni claves de Supabase.
+Abrir http://localhost:3000. El servidor de Next usa `SARM_API_URL` si esta configurada; por defecto apunta a https://sarm-backend.vercel.app. El navegador solo llama rutas /api del propio frontend. Para probar un backend local puedes cambiar esa variable en tu archivo existente a http://127.0.0.1:8000 y reiniciar Next.
 
-La única variable del frontend es:
+Antes de usar, el backend debe estar actualizado a 0.5.0 y Supabase debe tener las migraciones 11, 12 y 13 aplicadas en el proyecto separado sarm-db. Este frontend no requiere nuevas migraciones ni cambios en permisos SQL.
 
-```dotenv
-SARM_API_URL=https://sarm-backend.vercel.app
-```
+## Funciones
 
-Ya viene en `.env.local` para ejecución local. En Vercel añádela en Environment Variables. No necesita NEXT_PUBLIC. No se incluye `.env.example`.
+### Usuarios
 
-## Pantallas independientes
+Se conservan alta de negocio, alta de administrador, alta de operativo, tabla con filtros/paginacion y perfil bajo SARM. Menu Usuarios sigue siendo desplegable.
 
-| Ruta                     | Superadministrador                    | Administrador                                | Operativo  |
-| ------------------------ | ------------------------------------- | -------------------------------------------- | ---------- |
-| `/usuarios`              | Todas las cuentas, incluida la propia | Solo operativos de su negocio, sin incluirse | Sin acceso |
-| `/usuarios/nuevo`        | Crear operativo en negocio activo     | Crear operativo en su negocio                | Sin acceso |
-| `/administradores/nuevo` | Crear administrador                   | Sin acceso                                   | Sin acceso |
-| `/negocios/nuevo`        | Crear negocio                         | Sin acceso                                   | Sin acceso |
-| `/inicio`                | Bienvenida                            | Bienvenida                                   | Bienvenida |
+La tabla ahora incluye acciones por membresia:
 
-El superadministrador y el administrador entran directamente a Gestionar usuarios. El operativo entra a Inicio y no ve ningún menú de Usuarios. Las páginas protegidas verifican su rol en el servidor incluso cuando se escribe la URL directamente. La API del frontend también devuelve 403 al operativo en todas las rutas administrativas.
+- Superadministrador suspende/reactiva administradores y operativos por negocio.
+- Administrador solo gestiona operativos de su negocio activo.
+- Se pide motivo y confirmacion. La accion llama PATCH /usuarios/{id}/estado y actualiza la tabla al completarse.
+- No se muestran acciones sobre superadministrador o cuenta propia. Un bloqueo global o negocio suspendido se indica sin presentar una accion que no puede resolverlo.
+- Las membresias de multiples negocios tienen acciones independientes. Se cambia estado_membresia del negocio elegido, no la identidad de Auth.
 
-Debajo de S.A.R.M. aparece un círculo con iniciales y el nombre. Al abrirlo se despliega el nombre completo, nombre de usuario, rol, negocio y cierre de sesión. En móvil se accede mediante el botón Abrir menú; el panel de navegación es un diálogo con cierre por botón y Escape.
+### Ganado
 
-## Tabla de usuarios
+Menu Ganado para superadministrador y usuario operativo; administrador mantiene su funcion de gestion de cuentas y no ve ni puede abrir este modulo.
 
-Usa `GET /usuarios` del backend:
+El selector muestra negocios activos: todos para superadministrador, solo los autorizados para operativo. El negocio elegido permanece en el parametro `negocio` de la URL. Cambiar de negocio reinicia el contenido y formularios para no mezclar capturas. Un negocio solicitado fuera del alcance no se sustituye silenciosamente: se pide elegir uno autorizado.
 
-- Búsqueda por nombre y nombre de usuario. Pulsa Buscar o Enter.
-- Filtros por estado; el superadministrador también puede filtrar rol y negocio.
-- Paginación de 20, 50 o 100 cuentas por página, aplicada en el servidor.
-- Botones para actualizar y limpiar filtros.
-- Estados de carga, sin resultados y error con reintento.
-- La cuenta propia del superadministrador se identifica con Tú.
-- El administrador no recibe ni muestra otras membresías de una cuenta compartida.
+- /ganado/animales: listado paginado, busqueda por identificacion/nombre y filtros de sexo/estado.
+- /ganado/animales/nuevo: crear ficha, datos basicos, categoria, nacimiento estimado, procedencia y genealogia opcional.
+- /ganado/animales/{id}: consultar ficha y corregir campos con motivo. Especie/negocio no se editan.
+- Progenitores registrados: busqueda paginada de hasta 20 coincidencias por sexo/especie y seleccion en el mismo negocio. Se pueden usar datos externos o dejar desconocidos.
+- /ganado/hatos: crear/editar grupos y cambiar entre activo/archivado.
+- /ganado/ubicaciones: crear/editar potreros, corrales, establos u otros lugares y archivar/reactivar.
+- Expediente: asignar/mover hato y ubicacion con fecha y motivo; consultar historial.
+- Expediente: registrar baja por venta/muerte/otro, consultar bajas y anular una captura equivocada con motivo.
 
-Los desplegables aplican sus filtros de inmediato; la búsqueda se aplica al pulsar Buscar. Cambiar un filtro o el tamaño regresa a la primera página.
+No hay borrado fisico. El backend valida que las relaciones sean del mismo negocio, fechas coherentes, destinos activos y bajas no duplicadas. La interfaz muestra los errores recibidos y conserva el formulario para corregirlos. Para anular una baja con hato/lugar archivado, reactivar primero ese catalogo.
 
-No se agregan botones de edición, suspensión o borrado: esas operaciones no existen todavía en el backend. El estado de acceso es el que calcula la API, incluyendo bloqueos globales, membresías y negocios suspendidos.
+Al crear un animal no se intenta asignarlo automaticamente: la ficha se guarda y se abre el expediente; la asignacion posterior es una operacion independiente. Esto evita que una asignacion fallida oculte una ficha ya creada. Los movimientos envian siempre ambos destinos; elegir "Sin hato" o "Sin ubicacion" desasigna.
 
-## Backend y base de datos
+La primera entrega habilita bovinos. Los catalogos se consultan al backend; no se inventan IDs, razas, animales ni negocios en la aplicacion. Los catalogos de formularios se recorren por paginas para no truncarlos a los primeros 100 registros. Reproduccion, produccion, sanidad e indicadores no se incluyen todavia.
 
-Requiere el backend 0.4.0 con `GET /usuarios` y la migración 10 aplicada en el proyecto separado `sarm-db`.
+## Conexion y seguridad
 
-**Este frontend no incluye migraciones ni modifica el backend o la base de datos.** Si el servidor aún no publica el listado, se muestra un mensaje indicando que falta desplegar la actualización.
+Cookie de sesion HttpOnly, Secure en produccion y SameSite=Lax. Tokens nunca se devuelven al JavaScript del navegador; no se usan claves Supabase en el frontend. El perfil se verifica contra el backend para cada peticion del proxy.
 
-Se conservan las altas de negocios, administradores y operativos. Después de crear una cuenta se muestra una confirmación y el enlace Ver usuarios. Después de crear un negocio se ofrece Agregar su administrador.
+El proxy tiene una lista cerrada de rutas/metodos, valida identificadores y filtros y protege POST/PATCH con comprobacion de origen y JSON. El operativo solo puede solicitar ganado de membresias activas y negocios activos. El administrador no accede a ganado aunque intente llamar la ruta manualmente. La autorizacion final permanece en FastAPI/PostgreSQL.
 
-## Sesión
+Una respuesta 403 al verificar /auth/me se trata como sesion sin acceso y lleva al login en la siguiente peticion de la interfaz. Un 403 de una operacion concreta muestra el error sin confundirlo con expiracion de sesion. Si el usuario conserva acceso a otro negocio, puede seguir trabajando en el permitido. No hay renovacion automatica de tokens en esta entrega.
 
-Los tokens permanecen en una cookie HttpOnly, SameSite=Lax y Secure en producción. El navegador llama a Next.js y Next.js llama a FastAPI; no se necesitan claves secretas de Supabase ni cambios de CORS para este flujo.
-
-El backend actual no tiene renovación de sesión ni revocación por logout. Al vencer la sesión se requiere otro login; salir elimina la cookie de esta aplicación.
-
-## Comprobaciones
+## Verificacion
 
 ```powershell
 npm run build
@@ -73,8 +66,18 @@ npm run typecheck
 npm test
 ```
 
-Las pruebas de integración levantan una API simulada y el frontend local. Verifican login, cookie, navegación por rol, URLs protegidas, listado, filtros, paginación, bloqueo de negocio ajeno, altas existentes y cierre de sesión, sin tocar tu Supabase.
+`npm test` requiere el build previo. Levanta una API local simulada y el frontend de produccion en puerto 3107; no usa cuentas reales ni modifica Supabase. Comprueba 76 casos: login/cookies, roles, rutas directas, filtros, aislamiento, estado de cuentas, contratos PATCH/POST, catalogos, expediente, movimientos, bajas/anulacion y sesion suspendida.
 
-Para la aceptación con tus datos, inicia sesión con el superadministrador y ambos administradores. Comprueba la tabla, los filtros, que cada administrador solo vea su negocio y que un operativo no pueda abrir las rutas administrativas.
+Tambien se verificaron flujos en navegador de escritorio y movil con datos simulados: crear/corregir animal, alta de hato/ubicacion, movimiento/historial, baja/anulacion, suspension/reactivacion, menu y aislamiento por rol. La API publica desplegada reporto version 0.5.0 y los endpoints esperados al revisar su OpenAPI; no se usaron credenciales reales para modificar produccion.
 
-Resultado de validación: compilación de producción y TypeScript aprobados; 42 comprobaciones de integración con API simulada. Revisión en navegador de escritorio (1440 px) y móvil (390 px): login, tabla, búsqueda, limpieza de filtros, perfil, navegación móvil, alta de negocio y menú del operativo. Estas pruebas no crean registros en Supabase.
+## Publicar tus cambios
+
+Esta entrega se preparo localmente a partir del repositorio consultado. No cambia la rama main remota ni despliega Vercel por si sola. Despues de copiar y probar:
+
+```powershell
+git add .
+git commit -m "Conecta gestion de accesos y modulo de ganado"
+git push origin main
+```
+
+Conservar en Vercel la variable SARM_API_URL del backend, si ya existe. No es necesario agregar claves Supabase al frontend.

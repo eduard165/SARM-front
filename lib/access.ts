@@ -20,3 +20,10 @@ export async function requireManagement(superOnly = false) {
     redirect("/inicio");
   return actor;
 }
+
+export async function requireLivestock() {
+  const actor = await currentProfile();
+  if (!["superadministrador", "usuario"].includes(actor.rol))
+    redirect("/inicio");
+  return actor;
+}

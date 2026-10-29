@@ -1,3 +1,4 @@
+import Link from "next/link";
 import { currentProfile } from "@/lib/access";
 import { Leaf, ShieldCheck } from "lucide-react";
 import { roleNames } from "@/lib/types";
@@ -41,6 +42,11 @@ export default async function WelcomePage() {
           </div>
         </dl>
       </section>
+      {actor.rol !== "administrador" && (
+        <Link href="/ganado/animales" className="btn-primary mt-6">
+          Ir a ganado
+        </Link>
+      )}
     </>
   );
 }

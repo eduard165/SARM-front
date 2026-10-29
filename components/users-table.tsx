@@ -10,6 +10,7 @@ import {
   UsersRound,
   X,
 } from "lucide-react";
+import { UserStatusActions } from "./user-status-action";
 import { api } from "@/lib/client-api";
 import {
   roleNames,
@@ -25,6 +26,7 @@ interface Filters {
 }
 const empty: Filters = { q: "", rol: "", negocio_id: "", estado: "" };
 export function UsersTable({ actor }: { actor: Profile }) {
+  const [notice, setNotice] = useState("");
   const superadmin = actor.rol === "superadministrador";
   const [filters, setFilters] = useState<Filters>(empty);
   const [search, setSearch] = useState("");
@@ -143,6 +145,11 @@ export function UsersTable({ actor }: { actor: Profile }) {
           Agregar usuario
         </Link>
       </div>
+      {notice && (
+        <p className="success mt-6" role="status">
+          {notice}
+        </p>
+      )}
       <section className="panel mt-8 !p-0">
         <form
           onSubmit={submit}
@@ -322,6 +329,7 @@ export function UsersTable({ actor }: { actor: Profile }) {
                     "Rol",
                     "Negocio",
                     "Estado",
+                    "Acciones",
                   ].map((name) => (
                     <th
                       key={name}
@@ -386,6 +394,16 @@ export function UsersTable({ actor }: { actor: Profile }) {
                         />
                         {user.estado === "activo" ? "Activo" : "Suspendido"}
                       </span>
+                    </td>
+                    <td className="px-6 py-5">
+                      <UserStatusActions
+                        user={user}
+                        actor={actor}
+                        onChanged={(message) => {
+                          setNotice(message);
+                          setRetry((v) => v + 1);
+                        }}
+                      />
                     </td>
                   </tr>
                 ))}
