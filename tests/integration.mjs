@@ -8,33 +8,6 @@ const business = id(10),
   otherBusiness = id(11);
 const requests = [];
 let listFailure = false;
-let accessBlocked = false;
-let memberState = "activo";
-let serial = 100;
-const specie = {
-  id: id(30),
-  codigo: "bovino",
-  nombre: "Bovino",
-  habilitada: true,
-};
-const herds = [],
-  places = [],
-  animals = [],
-  moves = [],
-  withdrawals = [];
-const stamp = "2026-10-29T00:00:00Z";
-const pageOf = (items, url) => {
-  const pagina = Number(url.searchParams.get("pagina") || 1),
-    size = Number(url.searchParams.get("tamano_pagina") || 20);
-  return {
-    items: items.slice((pagina - 1) * size, pagina * size),
-    total: items.length,
-    pagina,
-    tamano_pagina: size,
-    total_paginas: Math.ceil(items.length / size),
-  };
-};
-
 const roles = ["superadministrador", "administrador", "usuario"];
 const identity = (role) => ({
   id: id(roles.indexOf(role) + 1),
@@ -76,190 +49,101 @@ const fixture = createServer(async (request, response) => {
       : send(401, { detail: "Credenciales incorrectas" });
   if (url.pathname === "/auth/me")
     return roles.includes(role)
-      ? accessBlocked && role === "usuario"
-        ? send(403, { detail: "Cuenta sin acceso activo" })
-        : send(200, identity(role))
+      ? send(200, identity(role))
       : send(401, { detail: "Token inválido" });
-  const statusMatch = url.pathname.match(/^\/usuarios\/([^/]+)\/estado$/);
-  if (statusMatch && request.method === "PATCH") {
-    if (statusMatch[1] === id(3)) memberState = data.estado;
+  if (url.pathname === "/inicio/resumen") {
+    const common = { actualizado_en: "2026-10-29T00:00:00Z" };
+    if (role === "superadministrador")
+      return send(200, {
+        ...common,
+        tipo: role,
+        negocio: null,
+        negocios: { total: 3, activos: 2, suspendidos: 1 },
+        usuarios: {
+          total: 8,
+          activos: 6,
+          suspendidos: 2,
+          superadministradores: 1,
+          administradores: 2,
+          operativos: 5,
+        },
+      });
+    if (role === "administrador")
+      return send(200, {
+        ...common,
+        tipo: role,
+        negocio: { id: business, nombre: "Rancho A" },
+        usuarios: { total: 5, activos: 3, suspendidos: 2 },
+      });
+    if (role === "usuario" && url.searchParams.get("negocio_id") === business)
+      return send(200, {
+        ...common,
+        tipo: role,
+        negocio: { id: business, nombre: "Rancho A" },
+        inventario: {
+          total: 125,
+          activos: 120,
+          bajas: 5,
+          hembras_activas: 100,
+          machos_activos: 20,
+          sin_categoria: 10,
+          sin_hato: 15,
+          sin_ubicacion: 20,
+        },
+        categorias: [
+          { id: id(40), nombre: "Vaca", total: 100 },
+          { id: id(41), nombre: "Toro", total: 10 },
+          { id: null, nombre: "Sin categoria", total: 10 },
+        ],
+        hatos: [
+          { id: id(50), nombre: "Grupo A", total: 105 },
+          { id: null, nombre: "Sin hato", total: 15 },
+        ],
+        ubicaciones: [
+          { id: id(60), nombre: "Corral A", total: 100 },
+          { id: null, nombre: "Sin ubicacion", total: 20 },
+        ],
+        recientes: [
+          {
+            id: id(100),
+            identificacion: "AN-100",
+            nombre: "Luna",
+            sexo: "hembra",
+            estado_registro: "activo",
+            fecha_incorporacion: "2026-10-29",
+            creado_en: "2026-10-29T00:00:00Z",
+          },
+        ],
+      });
+    return send(403, { detail: "Negocio no autorizado" });
+  }
+  if (
+    /^\/usuarios\/[^/]+\/estado$/.test(url.pathname) &&
+    request.method === "PATCH"
+  )
     return send(200, {
-      usuario_id: statusMatch[1],
+      usuario_id: url.pathname.split("/")[2],
       negocio_id: data.negocio_id,
       estado_membresia: data.estado,
       cambiado: true,
     });
-  }
-  const ganado = url.pathname.match(
-    /^\/negocios\/([^/]+)\/(animales|hatos|ubicaciones-ganaderas|especies-animales|categorias-animales|bajas-animales)(?:\/([^/]+))?(?:\/(movimientos|bajas|anular))?$/,
-  );
-  if (ganado) {
-    const [, biz, resource, record, action] = ganado;
-    if (role === "administrador" || (role === "usuario" && biz !== business))
-      return send(403, { detail: "Negocio no autorizado" });
-    if (resource === "especies-animales")
-      return send(200, pageOf([specie], url));
-    if (resource === "categorias-animales")
-      return send(
-        200,
-        pageOf(
-          [
-            {
-              id: id(31),
-              especie_id: specie.id,
-              codigo: "vaca",
-              nombre: "Vaca",
-              sexo: "hembra",
-            },
-            {
-              id: id(32),
-              especie_id: specie.id,
-              codigo: "toro",
-              nombre: "Toro",
-              sexo: "macho",
-            },
-          ],
-          url,
-        ),
-      );
-    if (resource === "bajas-animales" && action === "anular") {
-      const baja = withdrawals.find(
-        (b) => b.id === record && b.negocio_id === biz,
-      );
-      if (!baja) return send(404, { detail: "Baja no encontrada" });
-      baja.anulada_en = stamp;
-      baja.motivo_anulacion = data.motivo;
-      const animal = animals.find((a) => a.id === baja.animal_id);
-      animal.estado_registro = "activo";
-      return send(200, animal);
-    }
-    if (resource === "animales" && action) {
-      const animal = animals.find(
-        (a) => a.id === record && a.negocio_id === biz,
-      );
-      if (!animal) return send(404, { detail: "Animal no encontrado" });
-      const rows = action === "movimientos" ? moves : withdrawals;
-      if (request.method === "GET")
-        return send(
-          200,
-          pageOf(
-            rows.filter((r) => r.animal_id === record),
-            url,
-          ),
-        );
-      if (action === "movimientos") {
-        const row = {
-          id: id(serial++),
-          negocio_id: biz,
-          animal_id: record,
-          fecha: data.fecha,
-          motivo: data.motivo,
-          hato_origen_id: animal.hato_id,
-          hato_destino_id: data.hato_id,
-          ubicacion_origen_id: animal.ubicacion_ganadera_id,
-          ubicacion_destino_id: data.ubicacion_ganadera_id,
-          creado_en: stamp,
-        };
-        moves.push(row);
-        animal.hato_id = data.hato_id;
-        animal.ubicacion_ganadera_id = data.ubicacion_ganadera_id;
-        return send(201, row);
-      }
-      if (animal.estado_registro === "baja")
-        return send(422, { detail: "Animal ya dado de baja" });
-      const row = {
-        id: id(serial++),
-        negocio_id: biz,
-        animal_id: record,
-        fecha: data.fecha,
-        motivo: data.motivo,
-        observaciones: data.observaciones,
-        anulada_en: null,
-        motivo_anulacion: null,
-      };
-      withdrawals.push(row);
-      animal.estado_registro = "baja";
-      return send(201, row);
-    }
-    const rows =
-      resource === "animales" ? animals : resource === "hatos" ? herds : places;
-    if (request.method === "GET") {
-      if (record)
-        return send(
-          rows.some((r) => r.id === record && r.negocio_id === biz) ? 200 : 404,
-          rows.find((r) => r.id === record && r.negocio_id === biz) || {
-            detail: "No encontrado",
-          },
-        );
-      let filtered = rows.filter((r) => r.negocio_id === biz);
-      for (const key of [
-        "sexo",
-        "estado_registro",
-        "especie_id",
-        "categoria_id",
-        "hato_id",
-        "ubicacion_ganadera_id",
-      ])
-        if (url.searchParams.has(key))
-          filtered = filtered.filter(
-            (r) => r[key] === url.searchParams.get(key),
-          );
-      if (url.searchParams.get("q"))
-        filtered = filtered.filter((r) =>
-          [r.nombre, r.identificacion]
-            .join(" ")
-            .toLowerCase()
-            .includes(url.searchParams.get("q").toLowerCase()),
-        );
-      return send(200, pageOf(filtered, url));
-    }
-    if (request.method === "PATCH") {
-      const row = rows.find((r) => r.id === record && r.negocio_id === biz);
-      if (!row) return send(404, { detail: "No encontrado" });
-      const { motivo, ...changes } = data;
-      Object.assign(row, changes);
-      return send(200, row);
-    }
-    const row =
-      resource === "animales"
-        ? {
-            id: id(serial++),
-            negocio_id: biz,
-            nombre: null,
-            categoria_id: null,
-            tipo_racial: null,
-            procedencia: null,
-            padre_id: null,
-            madre_id: null,
-            padre_externo_identificacion: null,
-            padre_externo_raza: null,
-            madre_externa_identificacion: null,
-            madre_externa_raza: null,
-            hato_id: null,
-            ubicacion_ganadera_id: null,
-            nacimiento_estimado: false,
-            estado_registro: "activo",
-            observaciones: null,
-            creado_en: stamp,
-            actualizado_en: stamp,
-            ...data,
-          }
-        : {
-            id: id(serial++),
-            negocio_id: biz,
-            descripcion: null,
-            estado_registro: "activo",
-            ...data,
-          };
-    rows.push(row);
-    return send(201, row);
-  }
+  if (
+    /^\/negocios\/[^/]+\/animales$/.test(url.pathname) &&
+    request.method === "GET"
+  )
+    return send(200, {
+      items: [],
+      total: 0,
+      pagina: 1,
+      tamano_pagina: 20,
+      total_paginas: 0,
+    });
   if (url.pathname === "/usuarios" && request.method === "GET") {
     if (listFailure) return send(404, { detail: "Not Found" });
     const member = {
       negocio_id: business,
       nombre: "Rancho A",
-      estado_membresia: memberState,
+      estado_membresia: "activo",
       estado_negocio: "activo",
     };
     let users = [
@@ -273,7 +157,7 @@ const fixture = createServer(async (request, response) => {
       {
         ...identity("usuario"),
         nombre_completo: "Roberto Prueba",
-        estado: memberState,
+        estado: "activo",
         creado_en: "2026-01-01T00:00:00Z",
         negocios: [member],
       },
@@ -423,8 +307,8 @@ try {
     "Cookie protegida",
   );
   check(
-    (await call("/", auth())).headers.get("location") === "/usuarios",
-    "Superadmin entra al listado",
+    (await call("/", auth())).headers.get("location") === "/inicio",
+    "Superadmin entra a Inicio",
   );
   check(
     (await call("/", auth("usuario"))).headers.get("location") === "/inicio",
@@ -456,7 +340,7 @@ try {
   check(
     !operativeHtml.includes('href="/usuarios"') &&
       !operativeHtml.includes('href="/usuarios/nuevo"') &&
-      operativeHtml.includes("Tu acceso está activo"),
+      operativeHtml.includes("Hola,"),
     "Operativo sin menú Usuarios",
   );
   for (const path of [
@@ -614,29 +498,105 @@ try {
       (logout.headers.get("set-cookie") || "").includes("sarm_access_token=;"),
     "Cierre elimina cookie",
   );
-  // Nuevos contratos, permisos y rutas para estado de usuarios y ganado.
-  const statusOptions = {
-    ...mutation({
-      negocio_id: business,
-      estado: "suspendido",
-      motivo: "Prueba",
-    }),
-    method: "PATCH",
-  };
+  const globalSummary = await (
+    await call("/api/sarm/inicio/resumen", auth())
+  ).json();
   check(
-    (await call(`/api/sarm/usuarios/${id(3)}/estado`, statusOptions)).status ===
-      200,
-    "Superadmin suspende acceso",
+    globalSummary.tipo === "superadministrador" &&
+      globalSummary.negocios.total === 3,
+    "Resumen global por rol",
+  );
+  const adminSummary = await (
+    await call("/api/sarm/inicio/resumen", auth("administrador"))
+  ).json();
+  check(
+    adminSummary.tipo === "administrador" && !adminSummary.inventario,
+    "Admin sin informacion ganadera",
+  );
+  const lastSummary = requests
+    .filter((r) => r.path.startsWith("/inicio/resumen"))
+    .at(-1);
+  check(
+    new URL(lastSummary.path, "http://fixture").searchParams.get(
+      "negocio_id",
+    ) === business,
+    "Proxy aplica negocio propio al admin",
   );
   check(
-    requests.at(-1).data.motivo === "Prueba" &&
-      requests.at(-1).method === "PATCH",
-    "Estado conserva PATCH y motivo",
+    (
+      await call(
+        `/api/sarm/inicio/resumen?negocio_id=${otherBusiness}`,
+        auth("administrador"),
+      )
+    ).status === 403,
+    "Admin no cambia alcance del resumen",
   );
   check(
-    (await call(`/api/sarm/usuarios/${id(1)}/estado`, statusOptions)).status ===
-      403,
-    "No autosuspension",
+    (await call("/api/sarm/inicio/resumen", auth("usuario"))).status === 400,
+    "Operativo necesita negocio",
+  );
+  check(
+    (
+      await call(
+        `/api/sarm/inicio/resumen?negocio_id=${otherBusiness}`,
+        auth("usuario"),
+      )
+    ).status === 403,
+    "Operativo no consulta resumen ajeno",
+  );
+  const ranch = await (
+    await call(
+      `/api/sarm/inicio/resumen?negocio_id=${business}`,
+      auth("usuario"),
+    )
+  ).json();
+  check(
+    ranch.inventario.total === 125 && ranch.recientes.length === 1,
+    "Total completo independiente de lista reciente",
+  );
+  for (const q of [
+    "p_actor=spoof",
+    "rol=superadministrador",
+    "negocio_id=no-uuid",
+    `negocio_id=${business}&negocio_id=${otherBusiness}`,
+  ])
+    check(
+      (await call("/api/sarm/inicio/resumen?" + q, auth("usuario"))).status ===
+        400,
+      "Resumen rechaza filtro: " + q,
+    );
+  check(
+    (await call(`/api/sarm/inicio/resumen?negocio_id=${business}`, auth()))
+      .status === 400,
+    "Superadmin no envia un negocio ignorado",
+  );
+  check(
+    (await call("/api/sarm/inicio/resumen")).status === 401,
+    "Resumen sin sesion rechazado",
+  );
+  for (const role of roles) {
+    check(
+      (await call("/inicio", auth(role))).status === 200,
+      "Inicio disponible para " + role,
+    );
+    check(
+      (await call("/reportes", auth(role))).status === 200,
+      "Reportes disponible para " + role,
+    );
+  }
+  check(
+    (await call(`/api/sarm/negocios/${business}/animales`, auth("usuario")))
+      .status === 200,
+    "Proxy conserva ganado del operativo",
+  );
+  check(
+    (
+      await call(
+        `/api/sarm/negocios/${business}/animales`,
+        auth("administrador"),
+      )
+    ).status === 403,
+    "Admin sigue sin ganado",
   );
   check(
     (
@@ -645,194 +605,38 @@ try {
         method: "PATCH",
       })
     ).status === 200,
-    "Administrador infiere negocio para reactivar",
+    "Proxy conserva reactivacion de usuarios",
+  );
+  const { readFile } = await import("node:fs/promises");
+  const ts = (await import("typescript")).default;
+  const csvCode = ts.transpileModule(
+    await readFile(new URL("../lib/summary-csv.ts", import.meta.url), "utf8"),
+    {
+      compilerOptions: {
+        module: ts.ModuleKind.ESNext,
+        target: ts.ScriptTarget.ES2022,
+      },
+    },
+  ).outputText;
+  const { summaryCsv, csvCell } = await import(
+    "data:text/javascript;base64," + Buffer.from(csvCode).toString("base64")
   );
   check(
-    requests.at(-1).data.negocio_id === business,
-    "Negocio inferido en cuerpo de estado",
+    csvCell('=HYPERLINK("x")').startsWith("\"'"),
+    "CSV neutraliza formulas",
   );
   check(
-    (
-      await call(`/api/sarm/usuarios/${id(3)}/estado`, {
-        ...mutation(
-          { negocio_id: otherBusiness, estado: "activo", motivo: "Prueba" },
-          "administrador",
-        ),
-        method: "PATCH",
-      })
-    ).status === 403,
-    "Estado no admite negocio ajeno",
+    csvCell(" +SUM(1)").startsWith("\"'"),
+    "CSV neutraliza formulas con espacios",
+  );
+  const csv = summaryCsv(ranch);
+  check(
+    csv.startsWith("\uFEFF") && csv.includes('"Animales registrados","125"'),
+    "CSV incluye total completo y UTF-8 BOM",
   );
   check(
-    (
-      await call(`/api/sarm/usuarios/${id(3)}/estado`, {
-        ...mutation({
-          negocio_id: business,
-          estado: "activo",
-          motivo: "x",
-          p_actor: id(1),
-        }),
-        method: "PATCH",
-      })
-    ).status === 400,
-    "Estado no acepta actor del cliente",
-  );
-  const wrongPatch = {
-    ...statusOptions,
-    headers: { ...statusOptions.headers, Origin: "https://ajeno.example" },
-  };
-  check(
-    (await call(`/api/sarm/usuarios/${id(3)}/estado`, wrongPatch)).status ===
-      403,
-    "PATCH protegido contra otro origen",
-  );
-  check(
-    (await call("/api/sarm/negocios", auth("usuario"))).status === 200,
-    "Operativo consulta negocios propios",
-  );
-  const cattle = `/api/sarm/negocios/${business}`;
-  check(
-    (await call(cattle + "/animales", auth("administrador"))).status === 403,
-    "Administrador no consulta ganado",
-  );
-  check(
-    (
-      await call(
-        `/api/sarm/negocios/${otherBusiness}/animales`,
-        auth("usuario"),
-      )
-    ).status === 403,
-    "Operativo no consulta ganado ajeno",
-  );
-  check(
-    (await call(cattle + "/animales", auth("usuario"))).status === 200,
-    "Operativo consulta ganado propio",
-  );
-  const cattleHtml = await (
-    await call("/ganado/animales", auth("usuario"))
-  ).text();
-  check(
-    cattleHtml.includes("Ganado") && !cattleHtml.includes('href="/usuarios"'),
-    "Operativo ve ganado sin administracion",
-  );
-  check(
-    (await call("/ganado/animales", auth("administrador"))).headers.get(
-      "location",
-    ) === "/inicio",
-    "Administrador no abre pagina de ganado",
-  );
-  for (const query of [
-    "pagina=0",
-    "tamano_pagina=101",
-    "sexo=otro",
-    "hato_id=mal",
-    "p_actor=actor",
-    "q=a&q=b",
-    "estado_registro=archivado",
-  ])
-    check(
-      (await call(cattle + "/animales?" + query, auth())).status === 400,
-      "Filtro ganado invalido: " + query,
-    );
-  const species = await (
-    await call(cattle + "/especies-animales", auth())
-  ).json();
-  check(species.items[0].id === specie.id, "Catalogo Bovino llega al frontend");
-  const animalBody = {
-    especie_id: specie.id,
-    identificacion: "HTTP-001",
-    nombre: "Luna HTTP",
-    sexo: "hembra",
-    fecha_nacimiento: "2022-01-01",
-    fecha_incorporacion: "2026-01-01",
-    tipo_incorporacion: "compra",
-  };
-  const animalResponse = await call(cattle + "/animales", mutation(animalBody));
-  const animal = await animalResponse.json();
-  check(
-    animalResponse.status === 201 && animal.identificacion === "HTTP-001",
-    "Crear animal por BFF",
-  );
-  check(
-    (await call(cattle + "/animales/" + animal.id, auth())).status === 200,
-    "Consultar expediente",
-  );
-  const update = await call(cattle + "/animales/" + animal.id, {
-    ...mutation({ nombre: "Luna corregida", motivo: "Correccion" }),
-    method: "PATCH",
-  });
-  check(
-    update.status === 200 && (await update.json()).nombre === "Luna corregida",
-    "Corregir animal por PATCH",
-  );
-  const herd = await (
-    await call(cattle + "/hatos", mutation({ nombre: "Hato HTTP" }))
-  ).json();
-  const place = await (
-    await call(
-      cattle + "/ubicaciones-ganaderas",
-      mutation({ nombre: "Potrero HTTP", tipo: "potrero" }),
-    )
-  ).json();
-  check(herd.id && place.id, "Crear hato y ubicacion");
-  check(
-    (
-      await call(
-        cattle + "/animales/" + animal.id + "/movimientos",
-        mutation({
-          fecha: "2026-10-29",
-          hato_id: herd.id,
-          ubicacion_ganadera_id: place.id,
-          motivo: "Movimiento",
-        }),
-      )
-    ).status === 201,
-    "Mover animal",
-  );
-  check(
-    (
-      await (
-        await call(cattle + "/animales/" + animal.id + "/movimientos", auth())
-      ).json()
-    ).total === 1,
-    "Historial movimiento",
-  );
-  const bajaResponse = await call(
-    cattle + "/animales/" + animal.id + "/bajas",
-    mutation({ fecha: "2026-10-29", motivo: "venta" }),
-  );
-  const baja = await bajaResponse.json();
-  check(bajaResponse.status === 201, "Registrar baja");
-  const undo = await call(
-    cattle + "/bajas-animales/" + baja.id + "/anular",
-    mutation({ motivo: "Baja erronea" }),
-  );
-  check(
-    undo.status === 200 && (await undo.json()).estado_registro === "activo",
-    "Anular baja conserva HTTP 200",
-  );
-  check(
-    (
-      await call(cattle + "/animales/" + animal.id, {
-        ...mutation({}),
-        method: "DELETE",
-      })
-    ).status === 405,
-    "No permite borrado fisico",
-  );
-  check(
-    (await call(cattle + "/usuarios", auth())).status === 404,
-    "Proxy no abre recursos arbitrarios",
-  );
-  accessBlocked = true;
-  check(
-    (await call(cattle + "/animales", auth("usuario"))).status === 401,
-    "Cuenta suspendida se trata como sesion sin acceso",
-  );
-  accessBlocked = false;
-  check(
-    (await call(cattle + "/animales", auth("usuario"))).status === 200,
-    "Reactivacion permite consultar nuevamente",
+    csv.includes('"Hatos (activos)","Grupo A","105"'),
+    "CSV exporta agrupaciones reales",
   );
   console.log(
     `${count} comprobaciones aprobadas con API simulada. Sin cambios en Supabase.`,

@@ -24,10 +24,11 @@ async function forward(
   context: { params: Promise<{ path: string[] }> },
 ) {
   try {
-    const parts = (await context.params).path;
-    const path = "/" + parts.join("/"),
+    const parts = (await context.params).path,
+      path = "/" + parts.join("/"),
       method = request.method;
-    const livestock = livestockRoute(path, method);
+    const livestock = livestockRoute(path, method),
+      summary = method === "GET" && path === "/inicio/resumen";
     const statusRoute =
       method === "PATCH" &&
       parts.length === 3 &&
@@ -44,7 +45,7 @@ async function forward(
         ].includes(path)) ||
       (method === "POST" &&
         ["/negocios", "/administradores", "/usuarios"].includes(path));
-    if (!existing && !livestock && !statusRoute)
+    if (!existing && !livestock && !statusRoute && !summary)
       throw new ApiError(404, "Ruta no disponible.");
     if (method !== "GET") checkOrigin(request);
     let actor: Profile;
@@ -59,15 +60,44 @@ async function forward(
       throw e;
     }
     const manager = ["superadministrador", "administrador"].includes(actor.rol);
-    let query = new URLSearchParams();
-    let body: Record<string, unknown> | undefined;
+    let query = new URLSearchParams(),
+      body: Record<string, unknown> | undefined;
     if (method !== "GET") {
       const raw = await request.json();
       if (!raw || typeof raw !== "object" || Array.isArray(raw))
         throw new ApiError(400, "Envía un objeto JSON.");
       body = raw;
     }
-    if (livestock) {
+    if (summary) {
+      const input = new URL(request.url).searchParams;
+      for (const key of input.keys())
+        if (key !== "negocio_id" || input.getAll(key).length !== 1)
+          throw new ApiError(400, "Filtro de resumen no permitido o repetido.");
+      const negocio = input.get("negocio_id");
+      if (negocio && !uuidPattern.test(negocio))
+        throw new ApiError(400, "Negocio inválido.");
+      if (actor.rol === "superadministrador") {
+        if (negocio)
+          throw new ApiError(400, "El resumen global no admite negocio.");
+      } else if (actor.rol === "administrador") {
+        const own = ownBusiness(actor);
+        if (negocio && negocio.toLowerCase() !== own.toLowerCase())
+          throw new ApiError(403, "Solo puedes consultar tu negocio.");
+        query.set("negocio_id", own);
+      } else if (actor.rol === "usuario") {
+        if (!negocio) throw new ApiError(400, "Selecciona un negocio.");
+        if (
+          !actor.negocios.some(
+            (m) =>
+              m.negocio_id.toLowerCase() === negocio.toLowerCase() &&
+              m.estado_membresia === "activo" &&
+              m.estado_registro === "activo",
+          )
+        )
+          throw new ApiError(403, "Negocio no autorizado.");
+        query.set("negocio_id", negocio);
+      } else throw new ApiError(403, "Rol no autorizado.");
+    } else if (livestock) {
       if (!["superadministrador", "usuario"].includes(actor.rol))
         throw new ApiError(
           403,
@@ -166,14 +196,13 @@ async function forward(
         }
       }
     }
-    const data = await backend(
-      path + (query.size ? "?" + query.toString() : ""),
-      {
-        method,
-        headers: { Authorization: `Bearer ${await token()}` },
-        ...(body ? { body: JSON.stringify(body) } : {}),
-      },
-    );
+    const data = await backend(path + (query.size ? "?" + query : ""), {
+      method,
+      headers: { Authorization: `Bearer ${await token()}` },
+      ...(body ? { body: JSON.stringify(body) } : {}),
+    });
+    if (summary && (!data || data.tipo !== actor.rol))
+      throw new ApiError(502, "El resumen no corresponde a tu perfil.");
     return Response.json(data, {
       status: livestock?.status ?? (method === "POST" ? 201 : 200),
       headers: { "Cache-Control": "no-store" },

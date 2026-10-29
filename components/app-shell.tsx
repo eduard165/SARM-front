@@ -5,6 +5,7 @@ import Link from "next/link";
 import { usePathname, useSearchParams } from "next/navigation";
 import {
   Building2,
+  FileBarChart,
   Beef,
   ChevronDown,
   Home,
@@ -22,6 +23,7 @@ import { LogoutButton } from "./logout-button";
 
 const titles: Record<string, string> = {
   "/inicio": "Inicio",
+  "/reportes": "Reportes",
   "/ganado/animales": "Animales",
   "/ganado/animales/nuevo": "Registrar animal",
   "/ganado/hatos": "Hatos",
@@ -225,7 +227,10 @@ function Navigation({
       <Link
         key={href}
         href={
-          href.startsWith("/ganado") && business
+          (href.startsWith("/ganado") ||
+            href === "/reportes" ||
+            href === "/inicio") &&
+          business
             ? `${href}?negocio=${encodeURIComponent(business)}`
             : href
         }
@@ -251,6 +256,7 @@ function Navigation({
   return (
     <nav aria-label="Menú principal" className="mt-8 space-y-1">
       {item(home)}
+      {item({ href: "/reportes", label: "Reportes", icon: FileBarChart })}
 
       {manager && (
         <details
