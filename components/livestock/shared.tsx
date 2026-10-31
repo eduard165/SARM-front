@@ -35,7 +35,11 @@ export function LivestockProvider({
     router = useRouter();
   useEffect(() => {
     const abort = new AbortController();
-    setError("");
+    setError('');
+    if(actor.rol==='usuario'){
+      setBusinesses(actor.negocios.filter(m=>m.estado_membresia==='activo'&&m.estado_registro==='activo').map(m=>({id:m.negocio_id,nombre:m.nombre_negocio||'Rancho',estado_registro:'activo'})));
+      return ()=>abort.abort();
+    }
     api("negocios", undefined, abort.signal)
       .then((rows: Business[]) => {
         if (!Array.isArray(rows))
@@ -248,3 +252,5 @@ export function Pagination({
 }
 export const tableClass =
   "w-full min-w-[680px] border-collapse text-left text-sm [&_th]:px-5 [&_th]:py-4 [&_th]:text-xs [&_th]:font-semibold [&_th]:text-stone-500 [&_td]:px-5 [&_td]:py-4 [&_tr]:border-b [&_tr]:border-stone-100";
+
+export function useDebounced(value:string,delay=300){const[s,set]=useState(value);useEffect(()=>{const t=setTimeout(()=>set(value),delay);return()=>clearTimeout(t)},[value,delay]);return s}

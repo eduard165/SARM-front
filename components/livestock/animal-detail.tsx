@@ -108,6 +108,10 @@ export function AnimalDetail({ id }: { id: string }) {
       >
         Volver a animales
       </Link>
+      <div className="mt-4 flex flex-wrap gap-3">
+        <Link className="btn-secondary" href={`${href('/ganado/eventos')}&animal=${id}`}>Eventos del animal</Link>
+        <Link className="btn-secondary" href={`${href('/reportes')}&reporte=ficha&animal=${id}`}>Ficha en Excel o PDF</Link>
+      </div>
       <div className="mt-5 flex flex-wrap items-start justify-between gap-4">
         <div className="min-w-0 max-w-full">
           <span className="eyebrow">EXPEDIENTE DEL ANIMAL</span>

@@ -1,3 +1,4 @@
+import {fastProxy} from "@/lib/fast-proxy";
 import {
   ApiError,
   backend,
@@ -27,6 +28,8 @@ async function forward(
     const parts = (await context.params).path,
       path = "/" + parts.join("/"),
       method = request.method;
+    const fast=await fastProxy(request,path);
+    if(fast)return fast;
     const livestock = livestockRoute(path, method),
       summary = method === "GET" && path === "/inicio/resumen";
     const statusRoute =

@@ -27,6 +27,7 @@ const titles: Record<string, string> = {
   "/ganado/animales": "Animales",
   "/ganado/animales/nuevo": "Registrar animal",
   "/ganado/hatos": "Hatos",
+  "/ganado/eventos": "Eventos y registros",
   "/ganado/ubicaciones": "Ubicaciones ganaderas",
   "/usuarios": "Gestionar usuarios",
   "/usuarios/nuevo": "Agregar usuario",
@@ -192,6 +193,7 @@ function Navigation({
       icon: UserRoundPlus,
     },
     { href: "/ganado/hatos", label: "Hatos", icon: UsersRound },
+    { href: "/ganado/eventos", label: "Eventos y registros", icon: FileBarChart },
     {
       href: "/ganado/ubicaciones",
       label: "Ubicaciones",

@@ -11,7 +11,7 @@ export class ApiError extends Error {
     super(message);
   }
 }
-export async function backend(path: string, options: RequestInit = {}) {
+export async function backendResponse(path: string, options: RequestInit = {}) {
   const base = process.env.SARM_API_URL || "https://sarm-backend.vercel.app";
   let response: Response;
   try {
@@ -27,8 +27,8 @@ export async function backend(path: string, options: RequestInit = {}) {
       "No se pudo conectar con el servidor. Intenta nuevamente.",
     );
   }
-  const data = await response.json().catch(() => null);
   if (!response.ok) {
+    const data = await response.json().catch(() => null);
     const detail = data?.detail;
     const message =
       typeof detail === "string"
@@ -43,8 +43,9 @@ export async function backend(path: string, options: RequestInit = {}) {
           : "No se pudo completar la operación.";
     throw new ApiError(response.status, message);
   }
-  return data;
+  return response;
 }
+export async function backend(path:string,options:RequestInit={}){return (await backendResponse(path,options)).json()}
 export async function token() {
   return (await cookies()).get(SESSION_COOKIE)?.value;
 }

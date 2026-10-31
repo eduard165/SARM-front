@@ -16,7 +16,7 @@ import {
 import { api } from "@/lib/client-api";
 import type { Profile, Business } from "@/lib/types";
 import type { HomeSummary, Distribution } from "@/lib/summary-types";
-import { summaryCsv } from "@/lib/summary-csv";
+
 import { KpiCard } from "./kpi-card";
 import { MiniBars } from "./mini-bars";
 import { PageHeading } from "./page-heading";
@@ -42,29 +42,8 @@ export function SummaryWorkspace({
     requested = params.get("negocio");
   useEffect(() => {
     if (!operative) return;
-    const abort = new AbortController();
-    setBusinessError("");
-    api("negocios", undefined, abort.signal)
-      .then((rows: Business[]) => {
-        if (!Array.isArray(rows))
-          throw Error("Respuesta de negocios inválida.");
-        setBusinesses(
-          rows.filter(
-            (b) =>
-              b.estado_registro === "activo" &&
-              actor.negocios.some(
-                (m) =>
-                  m.negocio_id === b.id &&
-                  m.estado_membresia === "activo" &&
-                  m.estado_registro === "activo",
-              ),
-          ),
-        );
-      })
-      .catch((e) => {
-        if (!abort.signal.aborted) setBusinessError(e.message);
-      });
-    return () => abort.abort();
+    setBusinessError('');
+    setBusinesses(actor.negocios.filter(m=>m.estado_membresia==='activo'&&m.estado_registro==='activo').map(m=>({id:m.negocio_id,nombre:m.nombre_negocio||'Rancho',estado_registro:'activo'})));
   }, [operative, actor.negocios, retry]);
   const business = operative
     ? businesses?.find((b) => b.id === requested) ||
@@ -112,20 +91,6 @@ export function SummaryWorkspace({
       ? data
       : null;
   const refresh = () => setRetry((v) => v + 1);
-  function exportCsv() {
-    if (!activeData || loading) return;
-    const blob = new Blob([summaryCsv(activeData)], {
-        type: "text/csv;charset=utf-8;",
-      }),
-      url = URL.createObjectURL(blob),
-      a = document.createElement("a");
-    a.href = url;
-    a.download = `SARM-resumen-${activeData.tipo}-${activeData.actualizado_en.slice(0, 10)}.csv`;
-    document.body.append(a);
-    a.click();
-    a.remove();
-    setTimeout(() => URL.revokeObjectURL(url), 1000);
-  }
   const title = reports
     ? "Reportes"
     : `Hola, ${actor.nombre || actor.nombre_usuario}`;
@@ -155,16 +120,7 @@ export function SummaryWorkspace({
               <RefreshCw size={16} />
               Actualizar
             </button>
-            {reports && (
-              <button
-                className="btn-primary"
-                disabled={!activeData || loading}
-                onClick={exportCsv}
-              >
-                <Download size={16} />
-                Exportar CSV
-              </button>
-            )}
+
           </div>
         }
       />
@@ -477,7 +433,7 @@ export function SummaryWorkspace({
               href={href("/reportes")}
               className="mt-5 inline-flex items-center gap-2 text-sm font-semibold underline"
             >
-              Ver reportes y exportar resumen
+              Ver reportes en Excel y PDF
             </Link>
           )}
         </>
